@@ -1,4 +1,4 @@
-const CACHE_NAME = 'brunos-world-v3';
+const CACHE_NAME = 'brunos-world-v4';
 
 const ASSETS = [
   './',

@@ -26,9 +26,14 @@
   var treatCountEl = document.getElementById('treat-count');
   var dashChip = document.getElementById('dash-chip');
   var dashCountEl = document.getElementById('dash-count');
+  var skyChip = document.getElementById('sky-chip');
+  var skyCountEl = document.getElementById('sky-count');
+  var grassEl = document.getElementById('grass');
+  var fenceEl = document.getElementById('fence');
   var pickerOverlay = document.getElementById('game-picker');
   var tileTreat = document.getElementById('tile-treat');
   var tileDash = document.getElementById('tile-dash');
+  var tileSky = document.getElementById('tile-sky');
   var btnPickerClose = document.getElementById('btn-picker-close');
   var bookOverlay = document.getElementById('sticker-book');
   var bookPage = document.getElementById('book-page');
@@ -71,7 +76,7 @@
   // ---------- Persistence ----------
   var STORE_KEY = 'brunos-world-v1';
   var STICKERS = ['🎾', '🦴', '🫧', '⭐', '🌈', '🍖', '🐾', '❤️', '🌞', '🌙', '🏆', '🎉'];
-  var store = { stickers: [], fetchCount: 0, treatCount: 0, dashCount: 0, actions: 0, sound: true };
+  var store = { stickers: [], fetchCount: 0, treatCount: 0, dashCount: 0, skyBest: 0, skyBones: 0, actions: 0, sound: true };
   try {
     var raw = localStorage.getItem(STORE_KEY);
     if (raw) {
@@ -81,6 +86,8 @@
         if (typeof parsed.fetchCount === 'number') store.fetchCount = parsed.fetchCount;
         if (typeof parsed.treatCount === 'number') store.treatCount = parsed.treatCount;
         if (typeof parsed.dashCount === 'number') store.dashCount = parsed.dashCount;
+        if (typeof parsed.skyBest === 'number') store.skyBest = parsed.skyBest;
+        if (typeof parsed.skyBones === 'number') store.skyBones = parsed.skyBones;
         if (typeof parsed.actions === 'number') store.actions = parsed.actions;
         if (typeof parsed.sound === 'boolean') store.sound = parsed.sound;
       }
@@ -187,6 +194,23 @@
       tone(659, 0.09, { type: 'square', vol: 0.35, delay: 0.09 });
       tone(784, 0.16, { type: 'square', vol: 0.35, delay: 0.18 });
     },
+    skyBoing: function (combo) {
+      // pitch creeps up with each consecutive bounce, resets on a fall
+      var f = 150 + Math.min(combo, 10) * 22;
+      tone(f, 0.14, { type: 'triangle', slide: f * 2.6, vol: 0.26 });
+    },
+    megaBoing: function () {
+      tone(120, 0.18, { type: 'triangle', slide: 700, vol: 0.32 });
+      [523, 659, 784, 1047].forEach(function (n, i) {
+        tone(n, 0.09, { type: 'square', vol: 0.22, delay: 0.1 + i * 0.06 });
+      });
+    },
+    chuteOpen: function () {
+      noise(0.35, { filterType: 'bandpass', filterFreq: 900, vol: 0.15 });
+      [880, 784, 659, 587, 523].forEach(function (n, i) {
+        tone(n, 0.18, { type: 'triangle', vol: 0.18, delay: 0.2 + i * 0.32 });
+      });
+    },
     snoreOnce: function () {
       tone(72, 0.8, { type: 'sine', slide: 58, vol: 0.3 });
     },
@@ -229,11 +253,13 @@
     pose: 'portrait'
   };
 
+  // Global sprite scale: Sky Bruno shrinks the dog so the sky feels big.
+  var poseScale = 1;
   function setPose(name, facing) {
     if (facing) brunoState.facing = facing;
     brunoState.pose = name;
     var p = POSES[name];
-    var dispH = p.disp * H;
+    var dispH = p.disp * H * poseScale;
     var dispW = dispH * (p.w / p.h);
     brunoImg.src = SPRITE_DIR + p.file;
     brunoImg.style.height = Math.round(dispH) + 'px';
@@ -279,7 +305,11 @@
     TC_EXIT: 'TC_EXIT',
     BD_ENTER: 'BD_ENTER',
     BD_PLAY: 'BD_PLAY',
-    BD_EXIT: 'BD_EXIT'
+    BD_EXIT: 'BD_EXIT',
+    SB_PLAY: 'SB_PLAY',
+    SB_FALL: 'SB_FALL',
+    SB_READY: 'SB_READY',
+    SB_EXIT: 'SB_EXIT'
   };
   var state = S.IDLE;
   var seqGen = 0; // generation token: bumping it cancels in-flight sequences
@@ -287,7 +317,8 @@
   function inFetch() { return state.indexOf('FETCH') === 0; }
   function inTC() { return state.indexOf('TC_') === 0; }
   function inBD() { return state.indexOf('BD_') === 0; }
-  function inMini() { return inTC() || inBD(); }
+  function inSB() { return state.indexOf('SB_') === 0; }
+  function inMini() { return inTC() || inBD() || inSB(); }
 
   function setState(next) {
     state = next;
@@ -299,14 +330,16 @@
     btnGames.disabled = busy;
     yard.classList.toggle('bar-hidden', state === S.SLEEPING || inFetch() || inMini());
     var homeOn = (inFetch() && state !== S.FETCH_EXIT) ||
-                 (state === S.TC_PLAY) || (state === S.BD_PLAY);
+                 (state === S.TC_PLAY) || (state === S.BD_PLAY) ||
+                 (state === S.SB_PLAY) || (state === S.SB_FALL) || (state === S.SB_READY);
     btnHome.classList.toggle('hidden', !homeOn);
     // 🎮 chip shares the btn-home slot; only one of the two is ever visible
     btnGames.classList.toggle('hidden', state === S.SLEEPING || inFetch() || inMini());
     fetchChip.classList.toggle('hidden', !inFetch());
     treatChip.classList.toggle('hidden', !inTC());
     dashChip.classList.toggle('hidden', !inBD());
-    hintEl.classList.toggle('hidden', state !== S.FETCH_READY);
+    skyChip.classList.toggle('hidden', !inSB());
+    hintEl.classList.toggle('hidden', !(state === S.FETCH_READY || state === S.SB_READY));
   }
 
   function delay(ms, gen) {
@@ -317,8 +350,13 @@
 
   function goIdle() {
     stopSnore();
+    poseScale = 1;
     yard.classList.remove('night');
     yard.classList.remove('dashing');
+    grassEl.style.transform = '';
+    fenceEl.style.transform = '';
+    brunoImg.classList.remove('sb-spin', 'sb-squash');
+    if (typeof sb !== 'undefined' && sb.chute) { sb.chute.remove(); sb.chute = null; }
     gameLayer.innerHTML = '';
     bowlEl.classList.add('hidden');
     ballEl.classList.add('hidden');
@@ -772,7 +810,7 @@
   }
   function profileSize() {
     var p = POSES.profile_right;
-    var h = p.disp * H;
+    var h = p.disp * H * poseScale;
     return { h: h, w: h * (p.w / p.h) };
   }
   function clampFrac(f) {
@@ -1139,6 +1177,400 @@
     })();
   }
 
+  // ---------- SKY BRUNO (SB_*) ----------
+  // Bruno bounces up cloud platforms forever. Falling is never a failure:
+  // a parachute pops open and floats him gently back to the grass.
+  var sb = {
+    x: 0, y: 0, vx: 0, vy: 0, cam: 0, maxY: 0,
+    steer: 0, holding: false, face: 1,
+    plats: [], bones: [], genY: 0, lastX: 0,
+    combo: 0, chute: null
+  };
+  function sbNums() {
+    var g = 2.2 * H;                 // gravity px/s^2
+    var v0 = 0.95 * H;               // bounce impulse px/s
+    return {
+      g: g, v0: v0,
+      apex: (v0 * v0) / (2 * g),     // normal bounce height ~0.205 * H
+      tramp: 2.2,                    // trampoline impulse multiplier
+      acc: 3.2 * W,                  // steer acceleration px/s^2
+      maxVx: 0.95 * W,               // steer top speed px/s
+      platW: Math.max(72, Math.round(W * 0.2))
+    };
+  }
+  function updateSkyChip(n) { skyCountEl.textContent = String(n); }
+  function sbWrapDX(a, b) {
+    var d = a - b;
+    if (d > W / 2) d -= W;
+    if (d < -W / 2) d += W;
+    return d;
+  }
+  function sbScreenBottom(worldY) { return baselineY + (worldY - sb.cam); }
+  function sbClampX(x) {
+    var m = sbNums().platW / 2 + 8;
+    return Math.min(W - m, Math.max(m, x));
+  }
+
+  function sbAddPlat(x, y, type) {
+    var n = sbNums();
+    var el = document.createElement('div');
+    el.className = 'sb-plat' +
+      (type === 'drift' ? ' sb-drift' : '') +
+      (type === 'puff' ? ' sb-puff' : '');
+    el.style.width = n.platW + 'px';
+    if (type === 'tramp') {
+      var tr = document.createElement('div');
+      tr.className = 'sb-tramp';
+      el.appendChild(tr);
+    }
+    gameLayer.appendChild(el);
+    sb.plats.push({
+      el: el, x: x, y: y, type: type,
+      vx: type === 'drift' ? (0.07 + Math.random() * 0.06) * W * (Math.random() < 0.5 ? -1 : 1) : 0
+    });
+  }
+  function sbAddBone(x, y) {
+    var el = document.createElement('div');
+    el.className = 'sb-bone';
+    el.textContent = '🦴';
+    gameLayer.appendChild(el);
+    sb.bones.push({ el: el, x: x, y: y });
+  }
+
+  // Procedural climb: cozy and dense near the grass, airier higher up,
+  // but the next cloud is ALWAYS within 78% of a normal bounce apex.
+  function sbGenUpTo(top) {
+    var n = sbNums();
+    while (sb.genY < top) {
+      var pm = sb.genY / 10; // paw-meters at this altitude
+      var grow = Math.min(1, Math.max(0, (sb.genY - 300) / 3000)); // 0 cozy -> 1 airy
+      var gap = n.apex * (0.3 + 0.2 * grow) + Math.random() * n.apex * (0.2 + 0.08 * grow);
+      gap = Math.min(gap, 0.78 * n.apex);
+      var y = sb.genY + gap;
+      var dxMax = W * (0.22 + 0.2 * grow); // steerable in one bounce's airtime
+      var x = sbClampX(sb.lastX + (Math.random() * 2 - 1) * dxMax);
+      var type = 'normal';
+      var r = Math.random();
+      if (r < 0.1) type = 'tramp';                 // ~1 in 10
+      else if (pm > 60 && r < 0.3) type = 'puff';  // ~1 in 5 above height 60
+      else if (pm > 30 && r < 0.55) type = 'drift';// ~1 in 4 above height 30
+      sbAddPlat(x, y, type);
+      // cozy low altitude: often a second cloud on the same row
+      if (pm < 30 && Math.random() < 0.5) {
+        sbAddPlat(sbClampX(x + (x < W / 2 ? 1 : -1) * (0.3 + Math.random() * 0.15) * W),
+                  y + (Math.random() * 20 - 10), 'normal');
+      }
+      if (Math.random() < 0.33) {
+        sbAddBone(sbClampX(x + (Math.random() * 2 - 1) * 50), y + 55 + Math.random() * 25);
+      }
+      sb.lastX = x;
+      sb.genY = y;
+    }
+  }
+
+  function skyStartRun(gen) {
+    poseScale = 0.62; // smaller dog, bigger sky
+    gameLayer.innerHTML = '';
+    if (sb.chute) { sb.chute.remove(); sb.chute = null; }
+    sb.plats = [];
+    sb.bones = [];
+    sb.x = 0.5 * W;
+    sb.y = 0;
+    sb.vx = 0;
+    sb.cam = 0;
+    sb.maxY = 0;
+    sb.steer = 0;
+    sb.holding = false;
+    sb.face = 1;
+    sb.combo = 0;
+    var n = sbNums();
+    sb.vy = n.v0; // the first bounce fires itself from the grass
+    // starter row: cozy clouds right above the yard
+    sb.lastX = 0.5 * W;
+    sbAddPlat(sbClampX(0.26 * W), 0.5 * n.apex, 'normal');
+    sbAddPlat(sbClampX(0.5 * W), 0.56 * n.apex, 'normal');
+    sbAddPlat(sbClampX(0.74 * W), 0.5 * n.apex, 'normal');
+    sb.genY = 0.9 * n.apex;
+    sbGenUpTo(H * 1.3);
+    updateSkyChip(0);
+    brunoImg.classList.remove('sb-spin', 'sb-squash');
+    setAnim(null);
+    setPose('catch', 1);
+    bruno.style.left = Math.round(sb.x) + 'px';
+    bruno.style.bottom = baselineY + 'px';
+    sfx.skyBoing(0);
+    setState(S.SB_PLAY);
+    sbLoop(gen);
+  }
+
+  function enterSky() {
+    if (state !== S.IDLE) return;
+    var gen = ++seqGen;
+    skyStartRun(gen);
+  }
+
+  function sbBounce(p) {
+    var n = sbNums();
+    var isTramp = p && p.type === 'tramp';
+    sb.vy = n.v0 * (isTramp ? n.tramp : 1);
+    if (isTramp) {
+      sb.combo = 0;
+      sfx.megaBoing();
+      popSparkles(2);
+      brunoImg.classList.remove('sb-spin', 'sb-squash');
+      void brunoImg.offsetWidth;
+      brunoImg.classList.add('sb-spin');
+      setTimeout(function () { brunoImg.classList.remove('sb-spin'); }, 800);
+    } else {
+      sb.combo = Math.min(sb.combo + 1, 10);
+      sfx.skyBoing(sb.combo);
+      brunoImg.classList.remove('sb-squash');
+      void brunoImg.offsetWidth;
+      brunoImg.classList.add('sb-squash');
+    }
+    if (p && p.type === 'puff') {
+      // one bounce, then the wispy cloud poofs away
+      var idx = sb.plats.indexOf(p);
+      if (idx !== -1) sb.plats.splice(idx, 1);
+      p.el.classList.add('sb-puffed');
+      noise(0.12, { filterType: 'highpass', filterFreq: 1800, vol: 0.1 });
+      (function (el) { setTimeout(function () { el.remove(); }, 500); })(p.el);
+    }
+  }
+
+  function sbLoop(gen) {
+    var lastT = null;
+    function step(t) {
+      if (gen !== seqGen) return;
+      if (lastT === null) lastT = t;
+      var dt = Math.min((t - lastT) / 1000, 0.05);
+      lastT = t;
+      var n = sbNums();
+      var i, p;
+
+      // steering: press-and-hold halves, with a little inertia
+      if (sb.steer !== 0) sb.vx += sb.steer * n.acc * dt;
+      else sb.vx *= Math.max(0, 1 - 3.2 * dt); // slight damping
+      sb.vx = Math.min(n.maxVx, Math.max(-n.maxVx, sb.vx));
+      sb.x += sb.vx * dt;
+      if (sb.x < 0) sb.x += W;   // wrap-around at the side edges
+      if (sb.x >= W) sb.x -= W;
+      if (Math.abs(sb.vx) > 0.05 * W) sb.face = sb.vx > 0 ? 1 : -1;
+
+      // gravity
+      var prevY = sb.y;
+      sb.vy -= n.g * dt;
+      if (sb.vy < -1.8 * H) sb.vy = -1.8 * H;
+      sb.y += sb.vy * dt;
+
+      // drifters slide back and forth
+      for (i = 0; i < sb.plats.length; i++) {
+        p = sb.plats[i];
+        if (p.vx) {
+          p.x += p.vx * dt;
+          var m = n.platW / 2 + 8;
+          if (p.x < m) { p.x = m; p.vx = Math.abs(p.vx); }
+          if (p.x > W - m) { p.x = W - m; p.vx = -Math.abs(p.vx); }
+        }
+      }
+
+      var ps = profileSize();
+      // land only when falling onto a cloud from above (pass-through going up)
+      if (sb.vy < 0) {
+        for (i = 0; i < sb.plats.length; i++) {
+          p = sb.plats[i];
+          if (p.y > prevY || p.y < sb.y) continue; // feet must cross the cloud top
+          if (Math.abs(sbWrapDX(sb.x, p.x)) < n.platW / 2 + ps.w * 0.18) {
+            sb.y = p.y;
+            sbBounce(p);
+            break;
+          }
+        }
+        // at ground level the grass itself is springy — no way to fail early
+        if (sb.vy < 0 && sb.y <= 0 && sb.cam < 2) {
+          sb.y = 0;
+          sbBounce(null);
+        }
+      }
+
+      // camera scrolls the world down once Bruno crosses ~55% screen height
+      var sBottom = sbScreenBottom(sb.y);
+      if (sBottom > 0.55 * H) {
+        sb.cam += sBottom - 0.55 * H;
+        sBottom = 0.55 * H;
+      }
+
+      if (sb.y > sb.maxY) {
+        sb.maxY = sb.y;
+        updateSkyChip(Math.floor(sb.maxY / 10)); // 1 paw-meter = 10px climbed
+      }
+
+      sbGenUpTo(sb.cam + H * 1.3);
+
+      // bones: pure bonus, +blip and sparkle
+      for (i = sb.bones.length - 1; i >= 0; i--) {
+        var b = sb.bones[i];
+        if (Math.abs(sbWrapDX(sb.x, b.x)) < 46 && Math.abs(sb.y + ps.h * 0.45 - b.y) < 60) {
+          sb.bones.splice(i, 1);
+          b.el.classList.add('sb-got');
+          (function (el) { setTimeout(function () { el.remove(); }, 450); })(b.el);
+          sfx.blip();
+          spawnFx('sparkle', b.x, H - sbScreenBottom(b.y), '✨');
+          store.skyBones++;
+          save();
+          bumpChip(skyChip);
+          // every 15 bones ever collected counts as one completed action
+          if (store.skyBones % 15 === 0) completeAction();
+        } else if (b.y < sb.cam - 0.25 * H) {
+          sb.bones.splice(i, 1);
+          b.el.remove();
+        }
+      }
+
+      // cull clouds that scrolled away below
+      for (i = sb.plats.length - 1; i >= 0; i--) {
+        if (sb.plats[i].y < sb.cam - 0.25 * H) {
+          sb.plats[i].el.remove();
+          sb.plats.splice(i, 1);
+        }
+      }
+
+      // render
+      for (i = 0; i < sb.plats.length; i++) {
+        p = sb.plats[i];
+        p.el.style.left = Math.round(p.x) + 'px';
+        p.el.style.bottom = Math.round(sbScreenBottom(p.y)) + 'px';
+      }
+      for (i = 0; i < sb.bones.length; i++) {
+        sb.bones[i].el.style.left = Math.round(sb.bones[i].x) + 'px';
+        sb.bones[i].el.style.bottom = Math.round(sbScreenBottom(sb.bones[i].y)) + 'px';
+      }
+      var ground = Math.min(sb.cam, H);
+      grassEl.style.transform = 'translateY(' + Math.round(ground) + 'px)';
+      fenceEl.style.transform = 'translateY(' + Math.round(ground) + 'px)';
+      bruno.style.left = Math.round(sb.x) + 'px';
+      bruno.style.bottom = Math.round(sBottom) + 'px';
+
+      // pose: leaping up (paws out) vs sailing down (profile)
+      var wantPose = sb.vy > 0 ? 'catch' : 'profile_right';
+      if (brunoState.pose !== wantPose || brunoState.facing !== sb.face) {
+        setPose(wantPose, sb.face);
+      }
+
+      // fell past the bottom edge: deploy the parachute ride home
+      if (sbScreenBottom(sb.y) < -ps.h * 0.6 && sb.cam > 2) {
+        skyFall(gen);
+        return;
+      }
+
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function skyFall(gen) {
+    if (gen !== seqGen) return;
+    setState(S.SB_FALL);
+    sb.combo = 0;
+    sb.steer = 0;
+    sb.holding = false;
+    var heightPm = Math.floor(sb.maxY / 10);
+    // parachute pops open above Bruno
+    var chute = document.createElement('div');
+    chute.className = 'sb-chute';
+    bruno.insertBefore(chute, brunoImg);
+    sb.chute = chute;
+    setAnim(null);
+    setPose('profile_right', 1);
+    sfx.chuteOpen();
+    var camStart = sb.cam;
+    var xStart = sb.x;
+    var y0 = camStart + H + 60 - baselineY; // re-enter from just above the top
+    var t0 = null;
+    var DUR = 2000; // the gentle ~2s float down
+    function step(t) {
+      if (gen !== seqGen) return;
+      if (t0 === null) t0 = t;
+      var u = Math.min(1, (t - t0) / DUR);
+      var e = u * u * (3 - 2 * u); // smoothstep
+      sb.cam = camStart * (1 - e);
+      sb.y = y0 * (1 - e);
+      sb.x = xStart + (0.5 * W - xStart) * e + Math.sin(u * 5) * 14 * (1 - u);
+      var ground = Math.min(sb.cam, H);
+      grassEl.style.transform = 'translateY(' + Math.round(ground) + 'px)';
+      fenceEl.style.transform = 'translateY(' + Math.round(ground) + 'px)';
+      var i;
+      for (i = 0; i < sb.plats.length; i++) {
+        sb.plats[i].el.style.bottom = Math.round(sbScreenBottom(sb.plats[i].y)) + 'px';
+      }
+      for (i = 0; i < sb.bones.length; i++) {
+        sb.bones[i].el.style.bottom = Math.round(sbScreenBottom(sb.bones[i].y)) + 'px';
+      }
+      bruno.style.left = Math.round(sb.x) + 'px';
+      bruno.style.bottom = Math.round(sbScreenBottom(sb.y)) + 'px';
+      if (u < 1) { requestAnimationFrame(step); return; }
+      skyLand(gen, heightPm);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function skyLand(gen, heightPm) {
+    if (gen !== seqGen) return;
+    // parachute folds away
+    if (sb.chute) {
+      sb.chute.classList.add('fold');
+      (function (el) { setTimeout(function () { el.remove(); }, 350); })(sb.chute);
+      sb.chute = null;
+    }
+    sfx.boing();
+    setPose('profile_right', 1);
+    setAnim('anim-breathe');
+    bruno.style.left = Math.round(0.5 * W) + 'px';
+    bruno.style.bottom = baselineY + 'px';
+    // friendly results: this climb + best ever (icons only)
+    var newBest = heightPm > (store.skyBest || 0);
+    if (newBest) store.skyBest = heightPm;
+    save();
+    var res = document.createElement('div');
+    res.className = 'sb-results';
+    res.innerHTML = '<div class="sb-res-chip">🐾 ' + heightPm + '</div>' +
+                    '<div class="sb-res-chip sb-res-best">🏆 ' + store.skyBest + '</div>';
+    gameLayer.appendChild(res);
+    // one tap anywhere relaunches — big pulsing ripple hint
+    hintEl.style.left = Math.round(0.5 * W) + 'px';
+    hintEl.style.top = Math.round(0.55 * H) + 'px';
+    setState(S.SB_READY);
+    if (newBest) {
+      popSparkles(5);
+      completeAction(); // beating the best counts as one completed action
+    }
+  }
+
+  function skyRelaunch() {
+    if (state !== S.SB_READY) return;
+    var gen = ++seqGen;
+    skyStartRun(gen);
+  }
+
+  function exitSky() {
+    if (!inSB()) return;
+    var wasReady = state === S.SB_READY; // results already banked that run
+    var gen = ++seqGen; // kills any sb rAF loop instantly
+    setState(S.SB_EXIT);
+    // an exit mid-climb still counts toward the best height
+    var heightPm = Math.floor(sb.maxY / 10);
+    if (!wasReady && heightPm > (store.skyBest || 0)) {
+      store.skyBest = heightPm;
+      save();
+      completeAction();
+    }
+    sb.plats = [];
+    sb.bones = [];
+    sb.holding = false;
+    sb.steer = 0;
+    goIdle();
+  }
+
   // ---------- Stickers ----------
   function renderStickerBook() {
     stickerGrid.innerHTML = '';
@@ -1224,6 +1656,7 @@
     if (inFetch()) exitFetch();
     else if (state === S.TC_PLAY) exitTreatCatch();
     else if (state === S.BD_PLAY) exitDash();
+    else if (inSB()) exitSky();
   });
   btnGames.addEventListener('click', function () { ensureAudio(); openPicker(); });
   btnPickerClose.addEventListener('click', closePicker);
@@ -1232,6 +1665,7 @@
   });
   tileTreat.addEventListener('click', function () { ensureAudio(); closePicker(); enterTreatCatch(); });
   tileDash.addEventListener('click', function () { ensureAudio(); closePicker(); enterDash(); });
+  tileSky.addEventListener('click', function () { ensureAudio(); closePicker(); enterSky(); });
   btnStickers.addEventListener('click', function () { ensureAudio(); openBook(); });
   btnBookClose.addEventListener('click', closeBook);
   bookOverlay.addEventListener('click', function (e) {
@@ -1264,17 +1698,37 @@
       bdJump();
       return;
     }
+    if (state === S.SB_PLAY) {
+      // press-and-hold steering: left half = left, right half = right
+      sb.holding = true;
+      sb.steer = x < W / 2 ? -1 : 1;
+      return;
+    }
+    if (state === S.SB_READY) {
+      skyRelaunch(); // one tap anywhere = instant new climb
+      return;
+    }
     if (onBruno) brunoTapReaction();
   });
 
-  // drag steering in Treat Catch
+  // drag steering in Treat Catch + held steering in Sky Bruno
   yard.addEventListener('pointermove', function (e) {
-    if (state !== S.TC_PLAY || !tc.dragging) return;
-    var rect = yard.getBoundingClientRect();
-    tc.target = clampFrac((e.clientX - rect.left) / W);
+    if (state === S.TC_PLAY && tc.dragging) {
+      var rect = yard.getBoundingClientRect();
+      tc.target = clampFrac((e.clientX - rect.left) / W);
+      return;
+    }
+    if (state === S.SB_PLAY && sb.holding) {
+      var r2 = yard.getBoundingClientRect();
+      sb.steer = (e.clientX - r2.left) < W / 2 ? -1 : 1;
+    }
   });
   ['pointerup', 'pointercancel'].forEach(function (ev) {
-    yard.addEventListener(ev, function () { tc.dragging = false; });
+    yard.addEventListener(ev, function () {
+      tc.dragging = false;
+      sb.holding = false;
+      sb.steer = 0;
+    });
   });
 
   // ---------- Resize ----------
@@ -1293,5 +1747,6 @@
   updateFetchChip();
   updateTreatChip();
   updateDashChip();
+  updateSkyChip(0);
   goIdle();
 })();
