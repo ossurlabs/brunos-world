@@ -1,0 +1,80 @@
+{
+  "portrait": {
+    "w": 1082,
+    "h": 1173,
+    "facing": "front",
+    "group": "idle"
+  },
+  "profile_right": {
+    "w": 848,
+    "h": 810,
+    "facing": "right",
+    "group": "idle"
+  },
+  "profile_left": {
+    "w": 822,
+    "h": 810,
+    "facing": "left",
+    "group": "idle"
+  },
+  "run_01": {
+    "w": 964,
+    "h": 766,
+    "facing": "right",
+    "group": "run"
+  },
+  "run_02": {
+    "w": 882,
+    "h": 823,
+    "facing": "right",
+    "group": "run"
+  },
+  "run_03": {
+    "w": 800,
+    "h": 777,
+    "facing": "right",
+    "group": "run"
+  },
+  "run_04": {
+    "w": 810,
+    "h": 847,
+    "facing": "right",
+    "group": "run"
+  },
+  "eat_01": {
+    "w": 1152,
+    "h": 661,
+    "facing": "right",
+    "group": "eat"
+  },
+  "eat_02": {
+    "w": 848,
+    "h": 847,
+    "facing": "right",
+    "group": "eat"
+  },
+  "wash_wet": {
+    "w": 1071,
+    "h": 956,
+    "facing": "front",
+    "group": "wash"
+  },
+  "wash_shake": {
+    "w": 860,
+    "h": 965,
+    "facing": "right",
+    "group": "wash"
+  },
+  "sleep": {
+    "w": 1478,
+    "h": 811,
+    "facing": "left",
+    "group": "sleep"
+  },
+  "catch": {
+    "w": 1421,
+    "h": 2075,
+    "facing": "right",
+    "group": "catch"
+  }
+}

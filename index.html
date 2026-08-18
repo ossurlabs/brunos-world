@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Bruno's World</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#7ec8f0">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="icon" href="assets/icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="yard">
+    <!-- sky decor -->
+    <div id="sun"></div>
+    <div class="cloud cloud-a"></div>
+    <div class="cloud cloud-b"></div>
+    <div id="stars"></div>
+    <div id="night"></div>
+
+    <!-- ground -->
+    <div id="fence"></div>
+    <div id="grass"></div>
+
+    <!-- title -->
+    <h1 id="title">Bruno&rsquo;s World</h1>
+
+    <!-- top controls -->
+    <button id="btn-stickers" class="chip-btn" aria-label="sticker book">🐾</button>
+    <button id="btn-sound" class="chip-btn" aria-label="sound">🔊</button>
+    <button id="btn-games" class="chip-btn" aria-label="mini games">🎮</button>
+    <div id="fetch-chip" class="hidden"><span>🎾</span><span id="fetch-count">0</span></div>
+    <div id="treat-chip" class="hidden"><span>🦴</span><span id="treat-count">0</span></div>
+    <div id="dash-chip" class="hidden"><span>🐾</span><span id="dash-count">0</span></div>
+
+    <!-- play field -->
+    <div id="bowl" class="hidden"><div class="bowl-food"></div><div class="bowl-dish"></div></div>
+    <div id="ball" class="hidden"></div>
+    <div id="tap-hint" class="hidden"><div class="ripple"></div><div class="ripple r2"></div></div>
+
+    <div id="game-layer"></div>
+
+    <div id="bruno">
+      <img id="bruno-img" src="assets/sprites/portrait.png" alt="Bruno" draggable="false">
+    </div>
+
+    <div id="fx-layer"></div>
+
+    <!-- action bar -->
+    <div id="action-bar">
+      <button class="act-btn" id="btn-feed" aria-label="feed">🦴</button>
+      <button class="act-btn" id="btn-wash" aria-label="wash">🫧</button>
+      <button class="act-btn" id="btn-fetch" aria-label="fetch">🎾</button>
+      <button class="act-btn" id="btn-sleep" aria-label="sleep">🌙</button>
+    </div>
+    <button id="btn-home" class="hidden" aria-label="back to yard">🏠</button>
+  </div>
+
+  <!-- mini-game picker overlay -->
+  <div id="game-picker" class="hidden">
+    <div id="picker-page">
+      <div id="picker-title">🐾 🎮 🐾</div>
+      <div id="picker-tiles">
+        <button class="game-tile" id="tile-treat" aria-label="treat catch">
+          <span class="tile-fall f1">🦴</span>
+          <span class="tile-fall f2">🍖</span>
+          <span class="tile-fall f3">⭐</span>
+          <span class="tile-dog">🐶</span>
+        </button>
+        <button class="game-tile" id="tile-dash" aria-label="backyard dash">
+          <span class="tile-runner" style="display:inline-block;transform:scaleX(-1)">🐕</span>
+          <span class="tile-log"></span>
+        </button>
+      </div>
+      <button id="btn-picker-close" aria-label="close">✕</button>
+    </div>
+  </div>
+
+  <!-- sticker book overlay -->
+  <div id="sticker-book" class="hidden">
+    <div id="book-page">
+      <div id="book-title">🐾</div>
+      <div id="sticker-grid"></div>
+      <button id="btn-book-close" aria-label="close">✕</button>
+    </div>
+  </div>
+
+  <!-- sticker celebration overlay -->
+  <div id="celebrate" class="hidden">
+    <div id="celebrate-sticker"></div>
+  </div>
+
+  <script src="game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('service-worker.js');
+    }
+  </script>
+</body>
+</html>
